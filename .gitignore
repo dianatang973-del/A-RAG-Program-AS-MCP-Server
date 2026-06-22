@@ -64,6 +64,9 @@ config/test_credentials.yaml
 config/settings.yaml.qa_backup
 config/settings.yaml.bak
 
+# Secrets - config with API keys
+config/settings.yaml
+
 # IDE
 .idea/
 .vscode/
@@ -105,3 +108,15 @@ traces.jsonl
 .env.*.local
 secrets.yaml
 nonexistent_traces.jsonl/
+
+# Sensitive config files
+application.yml
+application.yaml
+.env
+.env.*
+
+# Archive / build artifacts
+*.zip
+*.tar.gz
+*.rar
+*.7z

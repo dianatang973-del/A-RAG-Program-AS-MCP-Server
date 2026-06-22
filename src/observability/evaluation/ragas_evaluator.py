@@ -226,12 +226,16 @@ class RagasEvaluator(BaseEvaluator):
                 azure_endpoint=llm_azure_endpoint or llm_cfg.azure_endpoint,
                 api_version=getattr(llm_cfg, "api_version", None) or "2024-02-15-preview",
             )
-        elif provider == "openai":
-            llm_client = AsyncOpenAI(api_key=llm_cfg.api_key)
+        elif provider == "openai" or provider == "deepseek":
+            llm_base_url = getattr(llm_cfg, 'base_url', None)
+            if llm_base_url:
+                llm_client = AsyncOpenAI(api_key=llm_cfg.api_key, base_url=llm_base_url)
+            else:
+                llm_client = AsyncOpenAI(api_key=llm_cfg.api_key)
         else:
             raise ValueError(
                 f"Unsupported LLM provider for Ragas: '{provider}'. "
-                "Supported: azure, openai"
+                "Supported: azure, openai, deepseek"
             )
 
         llm = llm_factory(llm_cfg.model, client=llm_client, max_tokens=8192)
@@ -254,7 +258,11 @@ class RagasEvaluator(BaseEvaluator):
                 api_version=getattr(emb_cfg, "api_version", None) or "2024-02-15-preview",
             )
         elif emb_provider == "openai":
-            emb_client = AsyncOpenAI(api_key=emb_cfg.api_key)
+            emb_base_url = getattr(emb_cfg, 'base_url', None)
+            if emb_base_url:
+                emb_client = AsyncOpenAI(api_key=emb_cfg.api_key, base_url=emb_base_url)
+            else:
+                emb_client = AsyncOpenAI(api_key=emb_cfg.api_key)
         else:
             raise ValueError(
                 f"Unsupported embedding provider for Ragas: '{emb_provider}'. "

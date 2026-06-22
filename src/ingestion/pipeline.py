@@ -27,7 +27,7 @@ from src.observability.logger import get_logger
 
 # Libs layer imports
 from src.libs.loader.file_integrity import SQLiteIntegrityChecker
-from src.libs.loader.pdf_loader import PdfLoader
+from src.libs.loader.loader_factory import LoaderFactory
 from src.libs.embedding.embedding_factory import EmbeddingFactory
 from src.libs.vector_store.vector_store_factory import VectorStoreFactory
 
@@ -140,13 +140,9 @@ class IngestionPipeline:
         # Stage 1: File Integrity
         self.integrity_checker = SQLiteIntegrityChecker(db_path=str(resolve_path("data/db/ingestion_history.db")))
         logger.info("  ✓ FileIntegrityChecker initialized")
-        
-        # Stage 2: Loader
-        self.loader = PdfLoader(
-            extract_images=True,
-            image_storage_dir=str(resolve_path(f"data/images/{collection}"))
-        )
-        logger.info("  ✓ PdfLoader initialized")
+
+        # Note: Loader is created dynamically per file in run() method
+        # to support multiple document formats based on file extension
         
         # Stage 3: Chunker
         self.chunker = DocumentChunker(settings)
@@ -253,9 +249,22 @@ class IngestionPipeline:
             # ─────────────────────────────────────────────────────────────
             logger.info("\n📄 Stage 2: Document Loading")
             _notify("load", 2)
-            
+
+            # Create loader dynamically based on file extension
+            try:
+                loader = LoaderFactory.create_for_file(
+                    file_path,
+                    settings=self.settings,
+                    extract_images=True,
+                    image_storage_dir=str(resolve_path(f"data/images/{self.collection}"))
+                )
+                logger.info(f"  Selected loader: {loader.__class__.__name__}")
+            except ValueError as e:
+                logger.error(f"  ❌ Unsupported file format: {e}")
+                raise
+
             _t0 = time.monotonic()
-            document = self.loader.load(str(file_path))
+            document = loader.load(str(file_path))
             _elapsed = (time.monotonic() - _t0) * 1000.0
             
             text_preview = document.text[:200].replace('\n', ' ') + "..." if len(document.text) > 200 else document.text

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import httpx
 from src.core.settings import resolve_path
 from src.libs.llm.base_llm import BaseLLM, Message
 from src.libs.llm.llm_factory import LLMFactory
@@ -55,10 +56,20 @@ class LLMReranker(BaseReranker):
         """
         self.settings = settings
         self.prompt_path = prompt_path or str(resolve_path("config/prompts/rerank.txt"))
-        self.llm = llm or LLMFactory.create(settings)
         self.kwargs = kwargs
         
-        # Load prompt template
+        rerank_settings = settings.rerank
+        
+        if rerank_settings.api_key and rerank_settings.base_url:
+            self.rerank_api_key = rerank_settings.api_key
+            self.rerank_base_url = rerank_settings.base_url
+            self.rerank_model = rerank_settings.model
+            self.llm = None
+            self._use_rerank_api = True
+        else:
+            self.llm = llm or LLMFactory.create(settings)
+            self._use_rerank_api = False
+        
         try:
             self.prompt_template = self._load_prompt_template(self.prompt_path)
         except Exception as e:
@@ -225,30 +236,114 @@ class LLMReranker(BaseReranker):
             ValueError: If query or candidates are invalid.
             LLMRerankError: If LLM call fails or response is malformed.
         """
-        # Validate inputs
         self.validate_query(query)
         self.validate_candidates(candidates)
         
-        # If only one candidate, no need to rerank
         if len(candidates) == 1:
             return candidates
         
-        # Build prompt
+        if self._use_rerank_api:
+            return self._rerank_via_api(query, candidates, **kwargs)
+        else:
+            return self._rerank_via_llm(query, candidates, trace, **kwargs)
+    
+    def _rerank_via_api(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+        **kwargs: Any
+    ) -> List[Dict[str, Any]]:
+        """Rerank using dedicated rerank API.
+        
+        Args:
+            query: The user query string.
+            candidates: List of candidate records to rerank.
+            **kwargs: Additional parameters.
+        
+        Returns:
+            Reranked list of candidates sorted by relevance score.
+        """
+        documents = []
+        for i, candidate in enumerate(candidates):
+            text = candidate.get("text", candidate.get("content", ""))
+            documents.append(text)
+        
+        payload = {
+            "model": self.rerank_model,
+            "query": query,
+            "documents": documents,
+            "top_k": min(self.settings.rerank.top_k, len(candidates))
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.rerank_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    f"{self.rerank_base_url}/rerank",
+                    json=payload,
+                    headers=headers
+                )
+                response.raise_for_status()
+                result = response.json()
+        except httpx.HTTPStatusError as e:
+            raise LLMRerankError(f"Rerank API request failed: {e.response.status_code} - {e.response.text}") from e
+        except httpx.RequestError as e:
+            raise LLMRerankError(f"Rerank API request failed: {e}") from e
+        except Exception as e:
+            raise LLMRerankError(f"Rerank API call failed: {e}") from e
+        
+        results = result.get("results", [])
+        reranked = []
+        for item in results:
+            index = item.get("index")
+            relevance_score = item.get("relevance_score", 0)
+            if index is not None and 0 <= index < len(candidates):
+                candidate = candidates[index].copy()
+                candidate["rerank_score"] = float(relevance_score)
+                reranked.append(candidate)
+        
+        reranked.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
+        return reranked
+    
+    def _rerank_via_llm(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+        trace: Optional[Any] = None,
+        **kwargs: Any
+    ) -> List[Dict[str, Any]]:
+        """Rerank using LLM-based relevance scoring.
+        
+        Args:
+            query: The user query string.
+            candidates: List of candidate records to rerank.
+            trace: Optional TraceContext for observability.
+            **kwargs: Additional parameters (timeout, temperature, etc.).
+        
+        Returns:
+            Reranked list of candidates sorted by LLM-assigned relevance score.
+            On success, each candidate will have 'rerank_score' in metadata.
+        
+        Raises:
+            ValueError: If query or candidates are invalid.
+            LLMRerankError: If LLM call fails or response is malformed.
+        """
         try:
             prompt = self._build_rerank_prompt(query, candidates)
         except Exception as e:
             raise LLMRerankError(f"Failed to build rerank prompt: {e}") from e
         
-        # Call LLM
         try:
             messages = [Message(role="user", content=prompt)]
             response = self.llm.chat(messages, trace=trace, **kwargs)
             response_text = response.content
         except Exception as e:
-            # Return fallback signal - let upstream decide how to handle
             raise LLMRerankError(f"LLM call failed during reranking: {e}") from e
         
-        # Parse response
         try:
             parsed_results = self._parse_llm_response(response_text)
         except LLMRerankError:
@@ -256,7 +351,6 @@ class LLMReranker(BaseReranker):
         except Exception as e:
             raise LLMRerankError(f"Failed to parse LLM rerank response: {e}") from e
         
-        # Map back to candidates and sort
         try:
             reranked = self._map_results_to_candidates(parsed_results, candidates)
         except Exception as e:

@@ -137,6 +137,8 @@ class RerankSettings:
     provider: str
     model: str
     top_k: int
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -267,6 +269,8 @@ class Settings:
                 provider=_require_str(rerank, "provider", "rerank"),
                 model=_require_str(rerank, "model", "rerank"),
                 top_k=_require_int(rerank, "top_k", "rerank"),
+                api_key=rerank.get("api_key"),
+                base_url=rerank.get("base_url"),
             ),
             evaluation=EvaluationSettings(
                 enabled=_require_bool(evaluation, "enabled", "evaluation"),

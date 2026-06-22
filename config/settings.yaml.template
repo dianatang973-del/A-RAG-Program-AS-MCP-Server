@@ -1,0 +1,104 @@
+# Modular RAG MCP Server - Configuration Template
+# Copy this file to settings.yaml and fill in your own API keys
+
+# =============================================================================
+# LLM Configuration
+# =============================================================================
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  deployment_name: ""
+  azure_endpoint: ""
+  api_version: ""
+  api_key: "YOUR_LLM_API_KEY_HERE"
+  base_url: "https://api.deepseek.com"
+  temperature: 0.0
+  max_tokens: 4096
+
+# =============================================================================
+# Embedding Configuration
+# =============================================================================
+embedding:
+  provider: "openai"
+  model: "embedding-3"
+  dimensions: 2048
+  azure_endpoint: ""
+  deployment_name: ""
+  api_version: ""
+  api_key: "YOUR_EMBEDDING_API_KEY_HERE"
+  base_url: "https://open.bigmodel.cn/api/paas/v4/"
+
+# =============================================================================
+# Vision LLM Configuration (for Image Captioning)
+# =============================================================================
+vision_llm:
+  enabled: true
+  provider: "openai"
+  model: "qwen3-vl-flash"
+  azure_endpoint: ""
+  deployment_name: ""
+  api_version: ""
+  api_key: "YOUR_VISION_API_KEY_HERE"
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  max_image_size: 2048
+
+# =============================================================================
+# Vector Store Configuration
+# =============================================================================
+vector_store:
+  provider: "chroma"
+  persist_directory: "./data/db/chroma"
+  collection_name: "knowledge_hub"
+
+# =============================================================================
+# Retrieval Configuration
+# =============================================================================
+retrieval:
+  dense_top_k: 20
+  sparse_top_k: 20
+  fusion_top_k: 10
+  rrf_k: 60
+
+# =============================================================================
+# Rerank Configuration
+# =============================================================================
+rerank:
+  enabled: true
+  provider: "llm"
+  model: "rerank-3"
+  top_k: 5
+  api_key: "YOUR_RERANK_API_KEY_HERE"
+  base_url: "https://open.bigmodel.cn/api/paas/v4/"
+
+# =============================================================================
+# Evaluation Configuration
+# =============================================================================
+evaluation:
+  enabled: false
+  provider: "custom"
+  metrics:
+    - "hit_rate"
+    - "mrr"
+    - "faithfulness"
+
+# =============================================================================
+# Observability Configuration
+# =============================================================================
+observability:
+  log_level: "INFO"
+  trace_enabled: true
+  trace_file: "./logs/traces.jsonl"
+  structured_logging: true
+
+# =============================================================================
+# Ingestion Configuration
+# =============================================================================
+ingestion:
+  chunk_size: 1000
+  chunk_overlap: 200
+  splitter: "recursive"
+  batch_size: 100
+  chunk_refiner:
+    use_llm: true
+  metadata_enricher:
+    use_llm: true

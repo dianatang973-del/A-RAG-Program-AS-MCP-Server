@@ -199,6 +199,8 @@ class OpenAIEmbedding(BaseEmbedding):
             "text-embedding-3-small": 1536,
             "text-embedding-3-large": 3072,
             "text-embedding-ada-002": 1536,
+            "embedding-3": 2048,
+            "Embedding-3": 2048,
         }
         
         return model_dimensions.get(self.model)
